@@ -1,0 +1,328 @@
+//
+//  ARSleepGridMenu.m
+//  AnyRadio
+//
+//  Created by 任维超 on 14-8-21.
+//  Copyright (c) 2014年 AnyRadio.CN. All rights reserved.
+//
+
+#import "ARSleepGridMenu.h"
+#import <QuartzCore/QuartzCore.h>
+
+#define kMAX_CONTENT_SCROLLVIEW_HEIGHT 180
+
+@interface ARSleepGridMenu (){
+    NSTimer  *sleepTimer;
+    NSInteger setTimeInteger;
+    BOOL isSleepTimeEnable;
+}
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIScrollView *contentScrollView;
+@property (nonatomic, strong) UIImageView *sleepColck;
+@property (nonatomic, strong) UILabel *timeLabel;
+@property (nonatomic, strong) NSArray *itemTitles;
+@property (nonatomic, strong) NSArray *items;
+@property (nonatomic, strong) void (^actionHandle)(NSInteger);
+@end
+
+@implementation ARSleepGridMenu
+
+- (id)initWithFrame:(CGRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.backgroundColor = BaseMenuBackgroundColor(self.style);
+        
+        _itemTitles = [NSArray array];
+        _items = [NSArray array];
+        
+        _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+        _titleLabel.backgroundColor = [UIColor clearColor];
+        _titleLabel.backgroundColor = RGBCOLOR(243, 243, 243);
+        _titleLabel.font = [UIFont boldSystemFontOfSize:16];
+        _titleLabel.textAlignment = NSTextAlignmentCenter;
+        _titleLabel.textColor = BaseMenuTextColor(self.style);
+        [self addSubview:_titleLabel];
+        
+        _sleepColck = [[UIImageView alloc] initWithFrame:CGRectMake(_MainScreen_Width-72, 12, 16, 16)];
+        [_sleepColck setImage:SY_IMAGE(@"colck")];
+        [self addSubview:_sleepColck];
+        _timeLabel = [[UILabel alloc] initWithFrame:CGRectMake(_MainScreen_Width-54, 10, 50, 20)];
+        _timeLabel.textColor = RGBCOLOR(250, 61, 10);
+        _timeLabel.text = @"00:00";
+        _timeLabel.backgroundColor = [UIColor clearColor];
+        _timeLabel.font = [UIFont systemFontOfSize:15.f];
+        [self addSubview:_timeLabel];
+        
+        PlayManager *pm = [PlayManager getInstance];
+        int ptMin = [pm getPlayTime]/60;
+        int ptChapter = [pm getSleepPlayChapter];
+        DLog(@"get_set_time=:%d",ptMin);
+        if (pm.sleepTimeEnable) {
+            _sleepColck.hidden = NO;
+            _timeLabel.hidden = NO;
+            isSleepTimeEnable = YES;
+            if (ptMin > 0) {
+                int surplusTime = [pm getSurplusTime];
+                _timeLabel.text = [NSString stringWithFormat:@"%02d:%02d",surplusTime/60,surplusTime%60];
+                if (sleepTimer) {
+                    [sleepTimer invalidate];
+                    sleepTimer = nil;
+                }
+                sleepTimer =[NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(updateSleepTime) userInfo:nil repeats:YES];
+                [sleepTimer fire];
+            }else if (ptChapter > 0 && [pm getPlayType] != PT_RADIO && [pm getPlayType] != PT_PLAYBACK){
+                int sleepChapter = [pm getChapterCount];
+                _timeLabel.text = [NSString stringWithFormat:@"%d集",sleepChapter];
+            }else{
+                _sleepColck.hidden = YES;
+                _timeLabel.text = @"00:00";
+                _timeLabel.hidden = YES;
+            }
+        }else{
+            _sleepColck.hidden = YES;
+            _timeLabel.text = @"00:00";
+            _timeLabel.hidden = YES;
+        }
+        
+        _contentScrollView = [[UIScrollView alloc]initWithFrame:CGRectZero];
+        _contentScrollView.contentSize = _contentScrollView.bounds.size;
+        _contentScrollView.showsHorizontalScrollIndicator = NO;
+        _contentScrollView.showsVerticalScrollIndicator = YES;
+        _contentScrollView.backgroundColor = [UIColor whiteColor];
+        [self addSubview:_contentScrollView];
+    }
+    return self;
+}
+
+-(void)updateSleepTime
+{
+    PlayManager *pm = [PlayManager getInstance];
+    int sleepTime = [pm getSurplusTime];
+    if (sleepTime>0 && pm.sleepTimeEnable && [pm getPlayTime]>0) {
+        if (sleepTime >= 3600) {
+            _sleepColck.frame = CGRectMake(_MainScreen_Width-93, 12, 16, 16);
+            _timeLabel.frame = CGRectMake(_MainScreen_Width-75, 10, 71, 20);
+            _timeLabel.text = [NSString stringWithFormat:@"%02d:%02d:%02d",sleepTime/3600,(sleepTime/60)%60,sleepTime%60];
+        }else{
+            _sleepColck.frame = CGRectMake(_MainScreen_Width-72, 12, 16, 16);
+            _timeLabel.frame = CGRectMake(_MainScreen_Width-54, 10, 50, 20);
+            _timeLabel.text = [NSString stringWithFormat:@"%02d:%02d",sleepTime/60,sleepTime%60];
+        }
+    }else if(pm.sleepTimeEnable && [pm getSleepPlayChapter] >0){
+        int sleepChapter = [pm getChapterCount];
+        _sleepColck.frame = CGRectMake(_MainScreen_Width-72, 12, 16, 16);
+        _timeLabel.frame = CGRectMake(_MainScreen_Width-54, 10, 50, 20);
+        _timeLabel.text = [NSString stringWithFormat:@"%d集",sleepChapter];
+    }else{
+        _timeLabel.text = @"";
+        _sleepColck.hidden = YES;
+        if (sleepTimer) {
+            [sleepTimer invalidate];
+            sleepTimer = nil;
+        }
+    }
+}
+
+- (id)initWithTitle:(NSString *)title itemTitles:(NSArray *)itemTitles
+{
+    self = [self initWithFrame:[[UIScreen mainScreen] bounds]];
+    if (self) {
+        NSInteger count = itemTitles.count;
+        _titleLabel.text = title;
+        _itemTitles = [itemTitles subarrayWithRange:NSMakeRange(0, count)];
+        [self setupWithItemTitles:_itemTitles];
+    }
+    return self;
+}
+
+- (void)setupWithItemTitles:(NSArray *)titles{
+    NSMutableArray *items = [NSMutableArray array];
+    
+    PlayManager *pm = [PlayManager getInstance];
+    int ptMin = [pm getPlayTime]/60;
+    int ptChapter = [pm getSleepPlayChapter];
+    
+    for (int i = 0; i < titles.count; i++) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.tag = i;
+        [button addTarget:self action:@selector(tapAction:) forControlEvents:UIControlEventTouchUpInside];
+        [button setBackgroundImage:SY_IMAGE(@"睡眠未选") forState:UIControlStateNormal];
+        [button setBackgroundImage:SY_IMAGE(@"睡眠选中") forState:UIControlStateSelected];
+        [button setBackgroundImage:SY_IMAGE(@"睡眠选中") forState:UIControlStateHighlighted];
+        [button setBackgroundImage:SY_IMAGE(@"睡眠未选") forState:(UIControlStateSelected|UIControlStateHighlighted)];
+        button.titleLabel.font = [UIFont systemFontOfSize:15.f];
+        if (i == (titles.count-1)) {
+//            [button setBackgroundImage:SY_IMAGE(@"睡眠清除") forState:UIControlStateHighlighted];
+            button.titleLabel.font = [UIFont systemFontOfSize:17.f];
+        }
+        [button setTitle:titles[i] forState:UIControlStateNormal];
+        [button setTitleColor:BaseMenuTextColor(self.style) forState:UIControlStateNormal];
+        [button setTitleColor:RGBCOLOR(250, 61, 10) forState:UIControlStateSelected];
+        [button setTitleColor:RGBCOLOR(250, 61, 10) forState:UIControlStateHighlighted];
+        [button setTitleColor:BaseMenuTextColor(self.style) forState:(UIControlStateSelected|UIControlStateHighlighted)];
+        [items addObject:button];
+        [_contentScrollView addSubview:button];
+        
+        [button setSelected:NO];
+        if (i==0 && ptMin == 10) {
+            [button setSelected:YES];
+        }else if (i==1 && ptMin == 20){
+            [button setSelected:YES];
+        }else if (i==2 && ptMin == 30){
+            [button setSelected:YES];
+        }else if (i==3 && ptMin == 60){
+            [button setSelected:YES];
+        }else if (i==4 && ptMin == 90 && ([pm getPlayType] == PT_RADIO || [pm getPlayType] == PT_PLAYBACK)){
+            [button setSelected:YES];
+        }else if (i==5 && ptMin == 120 && ([pm getPlayType] == PT_RADIO || [pm getPlayType] == PT_PLAYBACK)){
+            [button setSelected:YES];
+        }else if (i==6 && ptMin == 150 && ([pm getPlayType] == PT_RADIO || [pm getPlayType] == PT_PLAYBACK)){
+            [button setSelected:YES];
+        }else if (i==4 && ptChapter == 1 && [pm getPlayType] != PT_RADIO){
+            [button setSelected:YES];
+        }else if (i==5 && ptChapter == 2 && [pm getPlayType] != PT_RADIO){
+            [button setSelected:YES];
+        }else if (i==6 && ptChapter == 3 && [pm getPlayType] != PT_RADIO){
+            [button setSelected:YES];
+        }else if (i==7 && ptMin == 0 && ptChapter == 0){
+            [button setSelected:YES];
+        }
+    }
+    _items = [NSArray arrayWithArray:items];
+}
+
+- (void)refreshMenu{
+    PlayManager *pm = [PlayManager getInstance];
+    int ptMin = [pm getPlayTime]/60;
+    int ptChapter = [pm getSleepPlayChapter];
+    for (int i = 0; i < self.items.count; i++) {
+        UIButton *button = self.items[i];
+        [button setSelected:NO];
+        if (i==0 && ptMin == 10) {
+            [button setSelected:YES];
+        }else if (i==1 && ptMin == 20){
+            [button setSelected:YES];
+        }else if (i==2 && ptMin == 30){
+            [button setSelected:YES];
+        }else if (i==3 && ptMin == 60){
+            [button setSelected:YES];
+        }else if (i==4 && ptMin == 90 && ([pm getPlayType] == PT_RADIO || [pm getPlayType] == PT_PLAYBACK)){
+            [button setSelected:YES];
+        }else if (i==5 && ptMin == 120 && ([pm getPlayType] == PT_RADIO || [pm getPlayType] == PT_PLAYBACK)){
+            [button setSelected:YES];
+        }else if (i==6 && ptMin == 150 && ([pm getPlayType] == PT_RADIO || [pm getPlayType] == PT_PLAYBACK)){
+            [button setSelected:YES];
+        }else if (i==4 && ptChapter == 1 && [pm getPlayType] != PT_RADIO){
+            [button setSelected:YES];
+        }else if (i==5 && ptChapter == 2 && [pm getPlayType] != PT_RADIO){
+            [button setSelected:YES];
+        }else if (i==6 && ptChapter == 3 && [pm getPlayType] != PT_RADIO){
+            [button setSelected:YES];
+        }else if (i==7 && ptMin == 0 && ptChapter == 0){
+            [button setSelected:YES];
+        }
+    }
+    
+    if (pm.sleepTimeEnable) {
+        _sleepColck.hidden = NO;
+        _timeLabel.hidden = NO;
+        isSleepTimeEnable = YES;
+        if (ptMin > 0) {
+            int surplusTime = [pm getSurplusTime];
+            _timeLabel.text = [NSString stringWithFormat:@"%02d:%02d",surplusTime/60,surplusTime%60];
+            if (sleepTimer) {
+                [sleepTimer invalidate];
+                sleepTimer = nil;
+            }
+            sleepTimer =[NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(updateSleepTime) userInfo:nil repeats:YES];
+            [sleepTimer fire];
+        }else if (ptChapter > 0 && [pm getPlayType] != PT_RADIO && [pm getPlayType] != PT_PLAYBACK){
+            int sleepChapter = [pm getChapterCount];
+            _timeLabel.text = [NSString stringWithFormat:@"%d集",sleepChapter];
+        }else{
+            _sleepColck.hidden = YES;
+            _timeLabel.text = @"00:00";
+            _timeLabel.hidden = YES;
+        }
+    }else{
+        _sleepColck.hidden = YES;
+        _timeLabel.text = @"00:00";
+        _timeLabel.hidden = YES;
+    }
+}
+
+- (void)setStyle:(ARSleepActionViewStyle)style {
+    _style = style;
+    
+    self.backgroundColor = BaseMenuBackgroundColor(style);
+    self.titleLabel.textColor = BaseMenuTextColor(style);
+    for (UIButton *item in self.items) {
+        [item setTitleColor:BaseMenuTextColor(style) forState:UIControlStateNormal];
+    }
+}
+
+- (void)layoutSubviews
+{
+    [super layoutSubviews];
+    
+    self.titleLabel.frame = (CGRect){CGPointZero, CGSizeMake(self.bounds.size.width, 40)};
+    
+    [self layoutContentScrollView];
+    self.contentScrollView.frame = (CGRect){CGPointMake(0, 42), self.contentScrollView.bounds.size};
+    
+    self.bounds = (CGRect){CGPointZero, CGSizeMake(self.bounds.size.width, self.titleLabel.bounds.size.height + self.contentScrollView.bounds.size.height)};
+}
+
+- (void)layoutContentScrollView
+{
+    UIEdgeInsets margin = UIEdgeInsetsMake(5, 13, 15, 13);//四周的边距
+    CGSize itemSize = CGSizeMake(68, 62);//(68,62)
+    
+    NSInteger itemCount = self.items.count;
+    NSInteger rowCount = ((itemCount - 1) / 4) + 1;
+    self.contentScrollView.contentSize = CGSizeMake(self.bounds.size.width, rowCount * itemSize.height + margin.top + margin.bottom + (rowCount-1)*5);
+    for (int i = 0; i < itemCount; i++) {
+        UIButton *item = self.items[i];
+        int row = i / 4;
+        int column = i % 4;
+        item.frame = CGRectMake(68*column+(_MainScreen_Width-68*4)/5*(column+1), margin.top + row * itemSize.height + row*3, 68, 64);
+        [item layoutIfNeeded];
+    }
+    
+    if (self.contentScrollView.contentSize.height > kMAX_CONTENT_SCROLLVIEW_HEIGHT) {
+        self.contentScrollView.bounds = (CGRect){CGPointZero, CGSizeMake(self.bounds.size.width, kMAX_CONTENT_SCROLLVIEW_HEIGHT)};
+    }else{
+        self.contentScrollView.bounds = (CGRect){CGPointZero, self.contentScrollView.contentSize};
+    }
+}
+
+#pragma mark -
+
+- (void)triggerSelectedAction:(void (^)(NSInteger))actionHandle
+{
+    self.actionHandle = actionHandle;
+}
+
+#pragma mark -
+
+- (void)tapAction:(id)sender
+{
+    if (self.actionHandle) {
+//        if ([sender isEqual:self.cancelButton]) {
+//            double delayInSeconds = 0.15;
+//            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+//            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+//                self.actionHandle(0);
+//            });
+//        }else{
+            double delayInSeconds = 0.15;
+            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                self.actionHandle([(UIButton *)sender tag] + 1);
+            });
+//        }
+    }
+}
+
+@end

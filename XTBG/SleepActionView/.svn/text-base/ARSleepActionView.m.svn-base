@@ -1,0 +1,352 @@
+//
+//  ARSleepActionView.m
+//  AnyRadio
+//
+//  Created by 任维超 on 14-8-21.
+//  Copyright (c) 2014年 AnyRadio.CN. All rights reserved.
+//
+
+#import "ARSleepActionView.h"
+#import "ARSleepBaseMenu.h"
+#import "ARSleepGridMenu.h"
+
+@interface ARSleepActionView () <UIGestureRecognizerDelegate>{
+    NSTimer *timer;
+}
+@property (nonatomic, strong) NSMutableArray *menus;
+@property (nonatomic, strong) CAAnimation *showMenuAnimation;
+@property (nonatomic, strong) CAAnimation *dismissMenuAnimation;
+@property (nonatomic, strong) CAAnimation *dimingAnimation;
+@property (nonatomic, strong) CAAnimation *lightingAnimation;
+// 点击背景取消
+@property (nonatomic, strong) UITapGestureRecognizer *tapGesture;
+@property (nonatomic, strong) ARSleepGridMenu *dismissMenu;
+@end
+
+@implementation ARSleepActionView
+
++ (ARSleepActionView *)sleepActionView
+{
+    static ARSleepActionView *actionView = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        CGRect rect = [[UIScreen mainScreen] bounds];
+        actionView = [[ARSleepActionView alloc] initWithFrame:rect];
+    });
+    
+    return actionView;
+}
+
+- (id)initWithFrame:(CGRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self) {
+        _menus = [NSMutableArray array];
+        
+        _tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapAction:)];
+        _tapGesture.delegate = self;
+        [self addGestureRecognizer:_tapGesture];
+    }
+    return self;
+}
+
+- (void)dealloc{
+    [self removeGestureRecognizer:_tapGesture];
+}
+
+- (void)tapAction:(UITapGestureRecognizer *)tapGesture{
+    CGPoint touchPoint = [tapGesture locationInView:self];
+    ARSleepGridMenu *menu = self.menus.lastObject;
+    if (!CGRectContainsPoint(menu.frame, touchPoint)) {
+        [[ARSleepActionView sleepActionView] dismissMenu:menu Animated:YES];
+        [self.menus removeObject:menu];
+    }
+}
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer{
+    if ([gestureRecognizer isEqual:self.tapGesture]) {
+        CGPoint p = [gestureRecognizer locationInView:self];
+        ARSleepGridMenu *topMenu = self.menus.lastObject;
+        if (CGRectContainsPoint(topMenu.frame, p)) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+#pragma mark -
+
+- (void)setMenu:(UIView *)menu animation:(BOOL)animated{
+    if (![self superview]) {
+        UIWindow *window = [[UIApplication sharedApplication] keyWindow];
+        [window addSubview:self];
+    }
+    
+    ARSleepBaseMenu *topMenu = (ARSleepBaseMenu *)menu;
+    
+    [self.menus makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    [self.menus addObject:topMenu];
+    
+    topMenu.style = self.style;
+    [self addSubview:topMenu];
+    [topMenu layoutIfNeeded];
+    topMenu.frame = (CGRect){CGPointMake(0, self.bounds.size.height - topMenu.bounds.size.height), topMenu.bounds.size};
+    
+    if (animated && self.menus.count == 1) {
+        [CATransaction begin];
+        [CATransaction setAnimationDuration:0.4];
+        [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+        [self.layer addAnimation:self.dimingAnimation forKey:@"diming"];
+        [topMenu.layer addAnimation:self.showMenuAnimation forKey:@"showMenu"];
+        [CATransaction commit];
+    }
+}
+
+- (void)refreshMenu{
+    ARSleepGridMenu *menu = self.menus.lastObject;
+    [menu refreshMenu];
+}
+
+- (void)dismissMenu:(ARSleepGridMenu *)menu Animated:(BOOL)animated
+{
+    if ([self superview]) {
+        [self.menus removeObject:menu];
+        if (animated && self.menus.count == 0) {
+            [CATransaction begin];
+            [CATransaction setAnimationDuration:0.4];
+            [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+            [CATransaction setCompletionBlock:^{
+                [self removeFromSuperview];
+                [menu removeFromSuperview];
+            }];
+            [self.layer addAnimation:self.lightingAnimation forKey:@"lighting"];
+            [menu.layer addAnimation:self.dismissMenuAnimation forKey:@"dismissMenu"];
+            [CATransaction commit];
+        }else{
+            [menu removeFromSuperview];
+            
+            ARSleepBaseMenu *topMenu = self.menus.lastObject;
+            topMenu.style = self.style;
+            [self addSubview:topMenu];
+            [topMenu layoutIfNeeded];
+            topMenu.frame = (CGRect){CGPointMake(0, self.bounds.size.height - topMenu.bounds.size.height), topMenu.bounds.size};
+        }
+    }
+}
+
+- (void)dismissMenuDelay:(ARSleepGridMenu *)menu Animated:(BOOL)animated
+{
+    if ([self superview]) {
+//        if (animated && self.menus.count == 0) {
+            self.dismissMenu = menu;
+            if (timer) {
+                [timer invalidate];
+                timer = nil;
+            }
+            timer = [NSTimer scheduledTimerWithTimeInterval:2.0 target:self selector:@selector(dismissMenu:) userInfo:nil repeats:NO];
+//        }else{
+//            [self.menus removeObject:menu];
+//            [menu removeFromSuperview];
+//            
+//            ARSleepBaseMenu *topMenu = self.menus.lastObject;
+//            topMenu.style = self.style;
+//            [self addSubview:topMenu];
+//            [topMenu layoutIfNeeded];
+//            topMenu.frame = (CGRect){CGPointMake(0, self.bounds.size.height - topMenu.bounds.size.height), topMenu.bounds.size};
+//        }
+    }
+}
+
+- (void)dismissMenu:(id)sender{
+    [self.menus removeObject:self.dismissMenu];
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:0.3];
+    [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+    [CATransaction setCompletionBlock:^{
+        [self removeFromSuperview];
+        [self.dismissMenu removeFromSuperview];
+    }];
+    [self.layer addAnimation:self.lightingAnimation forKey:@"lighting"];
+    [self.dismissMenu.layer addAnimation:self.dismissMenuAnimation forKey:@"dismissMenu"];
+    [CATransaction commit];
+}
+
+#pragma mark -
+
+- (CAAnimation *)dimingAnimation
+{
+    if (_dimingAnimation == nil) {
+        CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"backgroundColor"];
+        opacityAnimation.fromValue = (id)[[UIColor colorWithWhite:0.0 alpha:0.0] CGColor];
+        opacityAnimation.toValue = (id)[[UIColor colorWithWhite:0.0 alpha:0.4] CGColor];
+        [opacityAnimation setRemovedOnCompletion:NO];
+        [opacityAnimation setFillMode:kCAFillModeBoth];
+        _dimingAnimation = opacityAnimation;
+    }
+    return _dimingAnimation;
+}
+
+- (CAAnimation *)lightingAnimation
+{
+    if (_lightingAnimation == nil ) {
+        CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"backgroundColor"];
+        opacityAnimation.fromValue = (id)[[UIColor colorWithWhite:0.0 alpha:0.4] CGColor];
+        opacityAnimation.toValue = (id)[[UIColor colorWithWhite:0.0 alpha:0.0] CGColor];
+        [opacityAnimation setRemovedOnCompletion:NO];
+        [opacityAnimation setFillMode:kCAFillModeBoth];
+        _lightingAnimation = opacityAnimation;
+    }
+    return _lightingAnimation;
+}
+
+- (CAAnimation *)showMenuAnimation
+{
+    if (_showMenuAnimation == nil) {
+        //        CABasicAnimation *rotateAnimation = [CABasicAnimation animationWithKeyPath:@"transform"];
+        //        CATransform3D t = CATransform3DIdentity;
+        //        t.m34 = 1 / -500.0f;
+        //        CATransform3D from = CATransform3DRotate(t, -30.0f * M_PI / 180.0f, 1, 0, 0);
+        //        CATransform3D to = CATransform3DIdentity;
+        //        [rotateAnimation setFromValue:[NSValue valueWithCATransform3D:from]];
+        //        [rotateAnimation setToValue:[NSValue valueWithCATransform3D:to]];
+        
+        //        CABasicAnimation *scaleAnimation = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        //        [scaleAnimation setFromValue:@0.9];
+        //        [scaleAnimation setToValue:@1.0];
+        
+        CABasicAnimation *positionAnimation = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
+        [positionAnimation setFromValue:[NSNumber numberWithFloat:200.0]];
+        [positionAnimation setToValue:[NSNumber numberWithFloat:0.0]];
+        
+        CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        [opacityAnimation setFromValue:@0.0];
+        [opacityAnimation setToValue:@1.0];
+        
+        CAAnimationGroup *group = [CAAnimationGroup animation];
+        [group setAnimations:@[/*rotateAnimation,  scaleAnimation, opacityAnimation,*/ positionAnimation]];
+        [group setRemovedOnCompletion:NO];
+        [group setFillMode:kCAFillModeBoth];
+        _showMenuAnimation = group;
+    }
+    return _showMenuAnimation;
+}
+
+- (CAAnimation *)dismissMenuAnimation
+{
+    if (_dismissMenuAnimation == nil) {
+        //        CABasicAnimation *rotateAnimation = [CABasicAnimation animationWithKeyPath:@"transform"];
+        //        CATransform3D t = CATransform3DIdentity;
+        //        t.m34 = 1 / -500.0f;
+        //        CATransform3D from = CATransform3DIdentity;
+        //        CATransform3D to = CATransform3DRotate(t, -30.0f * M_PI / 180.0f, 1, 0, 0);
+        //        [rotateAnimation setFromValue:[NSValue valueWithCATransform3D:from]];
+        //        [rotateAnimation setToValue:[NSValue valueWithCATransform3D:to]];
+        
+        //        CABasicAnimation *scaleAnimation = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        //        [scaleAnimation setFromValue:@1.0];
+        //        [scaleAnimation setToValue:@0.9];
+        
+        CABasicAnimation *positionAnimation = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
+        [positionAnimation setFromValue:[NSNumber numberWithFloat:0.0]];
+        [positionAnimation setToValue:[NSNumber numberWithFloat:200.0]];
+        
+        CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        [opacityAnimation setFromValue:@1.0];
+        [opacityAnimation setToValue:@0.0];//透明度
+        
+        CAAnimationGroup *group = [CAAnimationGroup animation];
+        [group setAnimations:@[/*rotateAnimation, scaleAnimation, opacityAnimation,*/ positionAnimation]];
+        [group setRemovedOnCompletion:NO];
+        [group setFillMode:kCAFillModeBoth];
+        _dismissMenuAnimation = group;
+    }
+    return _dismissMenuAnimation;
+}
+
++ (void)showGridMenuWithTitle:(NSString *)title
+                   itemTitles:(NSArray *)itemTitles
+               selectedHandle:(SGMenuActionHandler)handler{
+    ARSleepGridMenu *menu = [[ARSleepGridMenu alloc] initWithTitle:title
+                                                    itemTitles:itemTitles];
+    [menu triggerSelectedAction:^(NSInteger index){
+        if (handler) {
+            handler(index);
+//            [[ARSleepActionView sleepActionView] dismissMenuDelay:menu Animated:YES];
+        }else{//点击空白
+            [[ARSleepActionView sleepActionView] dismissMenu:menu Animated:YES];
+        }
+    }];
+    [[ARSleepActionView sleepActionView] setMenu:menu animation:YES];
+}
+
++ (void)showSleepMenu:(NSDictionary *)dictionary info:(NSDictionary *)infoDictionary {
+    PlayManager *pm = [PlayManager getInstance];
+    NSArray *titles = @[@"10分", @"20分", @"30分", @"60分", @"1集", @"2集", @"3集", @"清除" ];
+    if ([pm getPlayType] == PT_RADIO||[pm getPlayType] == PT_PLAYBACK) {
+        titles = @[@"10分", @"20分", @"30分", @"60分", @"90分", @"120分", @"150分", @"清除" ];
+    }
+    DLog(@"%@ %@", dictionary, infoDictionary);
+    [ARSleepActionView showGridMenuWithTitle:@"定时睡眠"
+                                itemTitles:titles
+                            selectedHandle:^(NSInteger index) {
+                                switch (index) {
+                                    case 1: {
+                                        [pm setPlayTime:10*60];
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 2: {
+                                        [pm setPlayTime:20*60];
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 3: {
+                                        [pm setPlayTime:30*60];
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 4: {
+                                        [pm setPlayTime:60*60];
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 5: {
+                                        if ([pm getPlayType] == PT_RADIO||[pm getPlayType] == PT_PLAYBACK) {
+                                            [pm setPlayTime:90*60];
+                                        }else{
+                                            [pm setSleepPlayChapter:1];
+                                        }
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 6:{
+                                        if ([pm getPlayType] == PT_RADIO||[pm getPlayType] == PT_PLAYBACK) {
+                                            [pm setPlayTime:120*60];
+                                        }else{
+                                            [pm setSleepPlayChapter:2];
+                                        }
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 7:{
+                                        if ([pm getPlayType] == PT_RADIO||[pm getPlayType] == PT_PLAYBACK) {
+                                            [pm setPlayTime:150*60];
+                                        }else{
+                                            [pm setSleepPlayChapter:3];
+                                        }
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    case 8:{
+                                        [pm stopSetPlayTime];
+                                        [[ARSleepActionView sleepActionView] refreshMenu];
+                                        break;
+                                    }
+                                    default: {
+                                        break;
+                                    }
+                                }
+                            }];
+}
+
+@end

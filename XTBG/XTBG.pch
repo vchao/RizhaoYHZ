@@ -1,0 +1,40 @@
+//
+//  XTBG.pch
+//  XTBG
+//
+//  Created by vchao on 15/1/8.
+//  Copyright (c) 2015年 rzzx. All rights reserved.
+//
+
+#ifndef XTBG_XTBG_pch
+#define XTBG_XTBG_pch
+
+// Include any system framework and library headers here that should be included in all compilation units.
+// You will also need to set the Prefix Header build setting of one or more of your targets to reference this file.
+
+#define API_DOMAIN @"http://yhzxtbg.rizhao.cn"
+
+#define USER_REAL_NAME @"USER_REAL_NAME"
+#define USER_ID        @"USER_ID"
+#define USER_LDHD      @"USER_LDHD"
+#define USER_LDHD_SORT @"USER_LDHD_SORT"
+
+//设备屏幕大小
+#define _MainScreenFrame   [[UIScreen mainScreen] bounds]
+//设备屏幕宽
+#define _MainScreen_Width  _MainScreenFrame.size.width
+//设备屏幕高 20,表示状态栏高度.如3.5inch 的高,得到的__MainScreenFrame.size.height是480,而去掉电量那条状态栏,我们真正用到的是460;
+#define _MainScreen_Height (_MainScreenFrame.size.height)
+
+//---------------------------颜色宏
+#pragma mark Color宏
+#define RGBCOLOR(r,g,b) [UIColor colorWithRed:(r)/255.0f green:(g)/255.0f blue:(b)/255.0f alpha:1]
+#define RGBACOLOR(r,g,b,a) [UIColor colorWithRed:(r)/255.0f green:(g)/255.0f blue:(b)/255.0f \
+alpha:(a)]
+#define RGBA(r,g,b,a) (r)/255.0f, (g)/255.0f, (b)/255.0f, (a)
+#define UIColorFromRGB(rgbValue) [UIColor colorWithRed:((float)((rgbValue & 0xFF0000) >> 16))/255.0 green:((float)((rgbValue & 0xFF00) >> 8))/255.0 blue:((float)(rgbValue & 0xFF))/255.0 alpha:1.0]
+
+#pragma mark UIImage宏
+#define SY_IMAGE(name) [UIImage imageNamed:(name)]
+
+#endif
